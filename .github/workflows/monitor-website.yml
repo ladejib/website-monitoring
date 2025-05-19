@@ -22,6 +22,7 @@ jobs:
         run: npm install axios nodemailer
       
       - name: Run website check
+        id: website_check
         run: node website-monitor.js
         env:
           WEBSITE_URL: ${{ secrets.WEBSITE_URL }}
@@ -31,6 +32,20 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_SERVICE: ${{ secrets.EMAIL_SERVICE || 'gmail' }}
+      
+      - name: Read status results
+        id: read_status
+        if: always()
+        run: |
+          if [ -f status.json ]; then
+            STATUS=$(cat status.json | jq -r '.status')
+            RESPONSE_TIME=$(cat status.json | jq -r '.responseTime')
+            echo "status=$STATUS" >> $GITHUB_OUTPUT
+            echo "response_time=$RESPONSE_TIME" >> $GITHUB_OUTPUT
+          else
+            echo "status=UNKNOWN" >> $GITHUB_OUTPUT
+            echo "response_time=0" >> $GITHUB_OUTPUT
+          fi
           
       - name: Update status history
         if: always()
@@ -38,12 +53,9 @@ jobs:
           git config --global user.name 'GitHub Actions Bot'
           git config --global user.email 'actions@github.com'
           date +"%Y-%m-%d %H:%M:%S" >> status_history.log
-          echo "Status: $WEBSITE_STATUS" >> status_history.log
-          echo "Response Time: $RESPONSE_TIME ms" >> status_history.log
+          echo "Status: ${{ steps.read_status.outputs.status }}" >> status_history.log
+          echo "Response Time: ${{ steps.read_status.outputs.response_time }} ms" >> status_history.log
           echo "---" >> status_history.log
           git add status_history.log
           git commit -m "Update status log" || echo "No changes to commit"
           git push || echo "Nothing to push"
-        env:
-          WEBSITE_STATUS: ${{ env.WEBSITE_STATUS }}
-          RESPONSE_TIME: ${{ env.RESPONSE_TIME }}

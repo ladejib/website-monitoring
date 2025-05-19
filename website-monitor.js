@@ -1,6 +1,7 @@
-const axios = require('axios');
+onst axios = require('axios');
 const nodemailer = require('nodemailer');
 const fs = require('fs');
+const path = require('path');
 
 // Configuration from environment variables
 const websiteUrl = process.env.WEBSITE_URL;
@@ -10,6 +11,20 @@ const notificationEmail = process.env.NOTIFICATION_EMAIL;
 const emailUser = process.env.EMAIL_USER;
 const emailPassword = process.env.EMAIL_PASSWORD;
 const emailService = process.env.EMAIL_SERVICE || 'gmail';
+
+// GitHub Actions environment file path
+const GITHUB_ENV = process.env.GITHUB_ENV;
+
+// Function to set environment variables for GitHub Actions
+function setGitHubActionOutput(name, value) {
+  if (GITHUB_ENV) {
+    // Append to the GitHub environment file
+    fs.appendFileSync(GITHUB_ENV, `${name}=${value}\n`);
+    console.log(`Set environment variable: ${name}=${value}`);
+  } else {
+    console.log(`GitHub environment file not available, can't set ${name}=${value}`);
+  }
+}
 
 // Function to send notification email
 async function sendNotification(subject, message) {
@@ -49,11 +64,9 @@ async function checkWebsite() {
     });
     const responseTime = Date.now() - startTime;
     
-    // Set these for the GitHub Actions environment
-    process.env.WEBSITE_STATUS = response.status.toString();
-    process.env.RESPONSE_TIME = responseTime.toString();
-    console.log(`::set-env name=WEBSITE_STATUS::${response.status}`);
-    console.log(`::set-env name=RESPONSE_TIME::${responseTime}`);
+    // Set environment variables for GitHub Actions
+    setGitHubActionOutput('WEBSITE_STATUS', response.status.toString());
+    setGitHubActionOutput('RESPONSE_TIME', responseTime.toString());
     
     console.log(`Status: ${response.status}, Response time: ${responseTime}ms`);
     
@@ -78,19 +91,33 @@ async function checkWebsite() {
       console.log('✅ Website is up and responding within acceptable time');
     }
     
+    // Write status to a file that can be used by other steps
+    fs.writeFileSync('status.json', JSON.stringify({
+      status: response.status,
+      responseTime: responseTime,
+      timestamp: new Date().toISOString()
+    }));
+    
   } catch (error) {
     console.error('❌ Error checking website:', error.message);
     
-    // Set these for the GitHub Actions environment
-    process.env.WEBSITE_STATUS = 'ERROR';
-    process.env.RESPONSE_TIME = '0';
-    console.log(`::set-env name=WEBSITE_STATUS::ERROR`);
-    console.log(`::set-env name=RESPONSE_TIME::0`);
+    // Set environment variables for GitHub Actions
+    setGitHubActionOutput('WEBSITE_STATUS', 'ERROR');
+    setGitHubActionOutput('RESPONSE_TIME', '0');
     
     await sendNotification(
       `🔴 Website DOWN: ${websiteUrl}`,
       `Failed to reach the website.\n\nError: ${error.message}\nTimestamp: ${new Date().toISOString()}`
     );
+    
+    // Write error status to a file
+    fs.writeFileSync('status.json', JSON.stringify({
+      status: 'ERROR',
+      responseTime: 0,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    }));
+    
     process.exit(1);
   }
 }
