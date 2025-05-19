@@ -1,0 +1,49 @@
+name: Website Monitoring
+
+on:
+  schedule:
+    # Run every 15 minutes
+    - cron: "*/15 * * * *"
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  monitor_website:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+      
+      - name: Install dependencies
+        run: npm install axios nodemailer
+      
+      - name: Run website check
+        run: node website-monitor.js
+        env:
+          WEBSITE_URL: ${{ secrets.WEBSITE_URL }}
+          EXPECTED_STATUS: ${{ secrets.EXPECTED_STATUS || '200' }}
+          MAX_RESPONSE_TIME: ${{ secrets.MAX_RESPONSE_TIME || '5000' }}
+          NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_SERVICE: ${{ secrets.EMAIL_SERVICE || 'gmail' }}
+          
+      - name: Update status history
+        if: always()
+        run: |
+          git config --global user.name 'GitHub Actions Bot'
+          git config --global user.email 'actions@github.com'
+          date +"%Y-%m-%d %H:%M:%S" >> status_history.log
+          echo "Status: $WEBSITE_STATUS" >> status_history.log
+          echo "Response Time: $RESPONSE_TIME ms" >> status_history.log
+          echo "---" >> status_history.log
+          git add status_history.log
+          git commit -m "Update status log" || echo "No changes to commit"
+          git push || echo "Nothing to push"
+        env:
+          WEBSITE_STATUS: ${{ env.WEBSITE_STATUS }}
+          RESPONSE_TIME: ${{ env.RESPONSE_TIME }}
