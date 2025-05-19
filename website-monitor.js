@@ -1,4 +1,4 @@
-onst axios = require('axios');
+const axios = require('axios');
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
